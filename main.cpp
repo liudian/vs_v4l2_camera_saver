@@ -24,9 +24,10 @@ int main(int argc, char** argv) {
     bpo::options_description opts("all options");
     bpo::variables_map vm;
     opts.add_options()
-            ("camear,c",bpo::value<std::string>(&video_device)->default_value("/dev/video0"),"save camera name ex:/dev/video0")
-            ("jpeg_quality,jq",bpo::value<int>(&jpeg_quality)->default_value(100),"jpeg quality")
-            ("out_path,of",bpo::value<std::string>(&out_file_path)->default_value("/home/liudian/addc/"),"save avi file path");
+            ("help","produce help message")
+            ("camera,c",bpo::value<std::string>(&video_device)->default_value("/dev/video0"),"save camera name ex:/dev/video0")
+            ("jpeg_quality",bpo::value<int>(&jpeg_quality)->default_value(100),"jpeg quality")
+            ("out_path",bpo::value<std::string>(&out_file_path)->default_value("./"),"save avi file path");
     try{
         bpo::store(parse_command_line(argc,argv,opts),vm);
     }
@@ -35,6 +36,11 @@ int main(int argc, char** argv) {
         return 0;
     }
     bpo::notify(vm);
+    if(vm.count("help")){
+        std::cout << opts << std::endl;
+        return 1;
+    }
+
 
     vs::V4L2Camera camera(video_device);
     vs::JPEGEncoderCUDA jpeg_encoder(camera.frame_width(),camera.frame_height(),jpeg_quality);
@@ -43,7 +49,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> split_string;
     boost::split(split_string,video_device,boost::is_any_of("/"),boost::token_compress_on);
     out_file_path += "/"+split_string.at(split_string.size()-1);
-    std::cout << out_file_path << std::endl;
+    std::cout << "save path:" << out_file_path << std::endl;
     out_file = fopen(out_file_path.c_str(),"wa+");
     for(;;){
 
