@@ -18,9 +18,10 @@ int main(int argc, char** argv) {
     std::string video_device;                                                                                           //设备名称 /dev/video0
     int jpeg_quality;                                                                                                   //图片质量 默认100
     int video_duration;                                                                                                 //视频拆分时长 默认5分钟300秒
+    video_duration = 300;
     FILE *out_file = nullptr;
     std::string out_file_path;
-    boost::posix_time::ptime before,now;
+
 
     //分析参数
     bpo::options_description opts("all options");
@@ -50,20 +51,25 @@ int main(int argc, char** argv) {
     vs::JPEGEncoderCUDA jpeg_encoder(camera.frame_width(),camera.frame_height(),jpeg_quality);
     cv::Mat rgb(cv::Size(camera.frame_width(),camera.frame_height()),CV_8UC3);
 
+    boost::posix_time::ptime before,now;
     std::vector<std::string> split_string;
     boost::split(split_string,video_device,boost::is_any_of("/"),boost::token_compress_on);
-    before = boost::posix_time::microsec_clock::local_time();
-    std::string out_file_path_name = out_file_path + "/"+split_string.at(split_string.size()-1)+"_"+to_iso_string(before);
+    boost::posix_time::time_duration td(0,0,video_duration+1,0);
+    before = boost::posix_time::microsec_clock::local_time()-td;
+    std::string out_file_path_name = out_file_path + split_string.at(split_string.size()-1)+"_"+to_iso_string(before);
     std::cout << "save path:" << out_file_path_name << std::endl;
-    out_file = fopen(out_file_path_name.c_str(), "wa+");
+//    out_file = fopen(out_file_path_name.c_str(), "wa+");
     for(;;){
 
         camera.read_frame_callback([&](void *p, std::uint32_t len, const v4l2_buffer &buf) {
             now = boost::posix_time::microsec_clock::local_time();
+//            std::cout << "total seconds:" << (now-before).total_seconds() << " video_duration:" << video_duration << std::endl;
+
             if((now-before).total_seconds() >= video_duration){
                 before = now;
-                fclose(out_file);
-                out_file_path_name = out_file_path+"/"+split_string.at(split_string.size()-1)+"_"+to_iso_string(now);
+                if(!access(out_file_path_name.c_str(),0))
+                    fclose(out_file);
+                out_file_path_name = out_file_path+split_string.at(split_string.size()-1)+"_"+to_iso_string(now);
                 out_file = fopen(out_file_path_name.c_str(),"wa+");
             }
 

@@ -1,0 +1,1 @@
+--camera=/dev/video0 --jpeg_quality=100 --out_path=./ --video_vuration=300
