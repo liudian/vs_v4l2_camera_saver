@@ -12,14 +12,16 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <exiv2/exiv2.hpp>
+
+using namespace Exiv2;
 namespace bpo = boost::program_options;
 
 int main(int argc, char** argv) {
     std::string video_device;                                                                                           //设备名称 /dev/video0
     int jpeg_quality;                                                                                                   //图片质量 默认100
     int video_duration;                                                                                                 //视频拆分时长 默认5分钟300秒
-    video_duration = 300;
-    FILE *out_file = nullptr;
+    video_duration = 10;
     std::string out_file_path;
 
 
@@ -58,29 +60,42 @@ int main(int argc, char** argv) {
     before = boost::posix_time::microsec_clock::local_time()-td;
     std::string out_file_path_name = out_file_path + split_string.at(split_string.size()-1)+"_"+to_iso_string(before);
     std::cout << "save path:" << out_file_path_name << std::endl;
-//    out_file = fopen(out_file_path_name.c_str(), "wa+");
+    FileIo out_file = FileIo(out_file_path_name);
     for(;;){
 
         camera.read_frame_callback([&](void *p, std::uint32_t len, const v4l2_buffer &buf) {
             now = boost::posix_time::microsec_clock::local_time();
 //            std::cout << "total seconds:" << (now-before).total_seconds() << " video_duration:" << video_duration << std::endl;
 
-            if((now-before).total_seconds() >= video_duration){
+            if((now-before).total_seconds() >= video_duration) {
                 before = now;
-                if(!access(out_file_path_name.c_str(),0))
-                    fclose(out_file);
-                out_file_path_name = out_file_path+split_string.at(split_string.size()-1)+"_"+to_iso_string(now);
-                out_file = fopen(out_file_path_name.c_str(),"wa+");
+                out_file_path_name =
+                        out_file_path + split_string.at(split_string.size() - 1) + "_" + to_iso_string(now);
+                out_file.close();
+                out_file.setPath(out_file_path_name);
+                out_file.open("wa+");
             }
 
-//            fwrite((char*)camera.buffers()[buf.index].start,1,buf.length,file);                                       //原始数据写入
             cv::Mat yuyv(cv::Size(camera.frame_width(),camera.frame_height()),CV_8UC2,p);
             cv::cvtColor(yuyv,rgb,cv::COLOR_YUV2RGB_YUYV);
             std::vector<uint8_t> vector = jpeg_encoder.encode(rgb.data);
-            fwrite(vector.data(),sizeof(decltype(vector)::value_type),vector.size(),out_file);
+
+            Image::UniquePtr image = ImageFactory::open((uint8_t *)(vector.data()),(size_t)vector.size());
+            assert(image.get()!=0);
+            image->readMetadata();
+            ExifData &exifData = image->exifData();
+            Value::UniquePtr v = Value::create(Exiv2::asciiString);
+            std::string timestamp = std::to_string(buf.timestamp.tv_sec)+std::to_string(buf.timestamp.tv_usec);
+            v->read(timestamp);
+            ExifKey key("Exif.Photo.DateTimeOriginal");
+            exifData.add(key,v.get());
+            image->setExifData(exifData);
+            image->writeMetadata();
+
+            out_file.write(image->io());
         });
     }
 
-    fclose(out_file);
-    return 0;
+//    fclose(out_file);
+//    return 0;
 }

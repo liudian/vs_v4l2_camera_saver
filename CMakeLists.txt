@@ -9,6 +9,7 @@ set(CMAKE_AUTOUIC ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(OpenCV REQUIRED opencv4)
 pkg_check_modules(x265 REQUIRED x265)
+find_package(exiv2 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system program_options date_time)
 
@@ -25,4 +26,5 @@ target_link_libraries(cameraSaver
         PUBLIC ${OpenCV_LIBRARIES}
         CUDA::cudart CUDA::nvjpeg
         Boost::program_options Boost::date_time
+        exiv2lib
         )
