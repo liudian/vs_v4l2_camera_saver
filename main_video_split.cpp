@@ -2,10 +2,11 @@
 // Created by fengchong 11/12/22.
 //
 #include <iostream>
-#include <fstream>
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/algorithm/algorithm.hpp>
 #include <exiv2/exiv2.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 namespace bpo = boost::program_options;
 
@@ -16,28 +17,37 @@ public:
     uint16_t FFE0;
 };
 
-int main(int argc,char **argv){
-    std::string video_path_name,out_path;
+void renameAllImage(boost::filesystem::path b_out_path){
+    boost::filesystem::directory_iterator endIter;
+    for(boost::filesystem::directory_iterator iter(b_out_path);iter!=endIter;iter++){
+        if(!boost::filesystem::is_directory(*iter)){
+            Exiv2::Image::UniquePtr  image = Exiv2::ImageFactory::open(iter->path().string());
+            assert(image.get()!=0);
+            image->readMetadata();
+            Exiv2::ExifData &exifData = image->exifData();
+            Exiv2::Exifdatum& tag = exifData["Exif.Photo.DateTimeOriginal"];
+            std::string timestamp = tag.toString();
+            std::string bname = basename(iter->path());
 
-    bpo::options_description opts("all options");
-    bpo::variables_map vm;
-    opts.add_options()
-            ("help","produce help message")
-            ("video",bpo::value<std::string>(&video_path_name),"video file path")
-            ("out_path",bpo::value<std::string>(&out_path)->default_value("./out/"),"save image file path");
-    try{
-        bpo::store(parse_command_line(argc,argv,opts),vm);
-    }
-    catch(...){
-        std::cout << "some args is not defined" << std::endl;
-        return 0;
-    }
-    bpo::notify(vm);
-    if(vm.count("help")){
-        std::cout << opts << std::endl;
-        return 1;
-    }
+            if(boost::algorithm::contains(bname,timestamp))
+                continue;
 
+            std::string rname = basename(iter->path())+"_"+ timestamp + iter->path().extension().string();
+            std::string rpath = iter->path().parent_path().string()+"/"+rname;
+            boost::filesystem::rename(iter->path().string(),rpath);
+
+            std::cout << "rname path:" << rpath << std::endl;
+
+//            std::cout << "path:" << iter->path().string() << " timestamp:" << timestamp
+//                        << " file name:" << iter->path().filename() << " parent_path:" << iter->path().parent_path()
+//                        << " extension:" << iter->path().extension() << " absolute:" << absolute(iter->path())
+//                        << " basename:" << basename(iter->path())<< std::endl;
+
+        }
+    }
+}
+
+int splitVideo(std::string video_path_name,std::string out_path){
     JpegSplitMark jsm;
     std::ifstream inFile(video_path_name,std::ios::in|std::ios::binary);
     if(!inFile){
@@ -46,7 +56,6 @@ int main(int argc,char **argv){
     }
 
     //创建输出路径
-    boost::filesystem::path b_out_path(out_path);
     boost::system::error_code error;
     if(!boost::filesystem::is_regular_file(out_path,error))
         boost::filesystem::create_directory(out_path,error);
@@ -68,31 +77,36 @@ int main(int argc,char **argv){
         }
     }
     inFile.close();
+    renameAllImage(boost::filesystem::path(out_path));
+    return 1;
+}
 
-    //批量改名
-    boost::filesystem::directory_iterator endIter;
-    for(boost::filesystem::directory_iterator iter(b_out_path);iter!=endIter;iter++){
-        if(!boost::filesystem::is_directory(*iter)){
-            Exiv2::Image::UniquePtr  image = Exiv2::ImageFactory::open(iter->path().string());
-            assert(image.get()!=0);
-            image->readMetadata();
-            Exiv2::ExifData &exifData = image->exifData();
-            Exiv2::Exifdatum& tag = exifData["Exif.Photo.DateTimeOriginal"];
-            std::string timestamp = tag.toString();
-            std::string rname = basename(iter->path())+"_"+ timestamp + iter->path().extension().string();
-            std::string rpath = iter->path().parent_path().string()+"/"+rname;
-            boost::filesystem::rename(iter->path().string(),rpath);
+int main(int argc,char **argv){
+    std::string video_path_name,out_path;
 
-            std::cout << "rname path:" << rpath << std::endl;
-
-//            std::cout << "path:" << iter->path().string() << " timestamp:" << timestamp
-//                        << " file name:" << iter->path().filename() << " parent_path:" << iter->path().parent_path()
-//                        << " extension:" << iter->path().extension() << " absolute:" << absolute(iter->path())
-//                        << " basename:" << basename(iter->path())<< std::endl;
-
-        }
+    bpo::options_description opts("all options");
+    bpo::variables_map vm;
+    opts.add_options()
+            ("help","produce help message")
+            ("video",bpo::value<std::string>(&video_path_name),"video file path")
+            ("out_path",bpo::value<std::string>(&out_path)->default_value("./output/"),"save image file path");
+    try{
+        bpo::store(parse_command_line(argc,argv,opts),vm);
+    }
+    catch(...){
+        std::cout << "some args is not defined" << std::endl;
+        return 0;
+    }
+    bpo::notify(vm);
+    if(vm.count("help")){
+        std::cout << opts << std::endl;
+        return 1;
     }
 
+    if(splitVideo(video_path_name,out_path)==0)
+        return 0;
+
+    return 1;
 }
 
 
